@@ -1601,7 +1601,7 @@ function PlayerTile({p, sk, step, period, side, onOpen}){
   const info=html`<div className="ptile-info" style=${{flex:1,minWidth:0,textAlign:away?'right':'left'}}>
     <div className="pn2" style=${{display:'block',justifyContent:away?'flex-end':'flex-start'}}>${p.name}</div>${meta}</div>`;
   const bdg=html`<${Badge} s=${teamShort} cls="sm"/>`;
-  return html`<div className="ptile" style=${{cursor:'pointer',display:'flex',alignItems:'center',gap:8,background:`linear-gradient(${away?'270deg':'90deg'},${hexA(clr,0.24)},${hexA(clr,0.05)})`,borderColor:hexA(clr,0.35)}} onClick=${()=>onOpen(p,sk)}>
+  return html`<div className="ptile" style=${{cursor:'pointer',display:'flex',alignItems:'center',gap:8,background:`linear-gradient(${away?'270deg':'90deg'},${hexA(clr,0.24)},${hexA(clr,0.05)})`,borderColor:hexA(clr,0.35)}} onClick=${()=>onOpen(p,sk,null,period)}>
     ${away?html`${sr}${info}${bdg}`:html`${bdg}${info}${sr}`}
   </div>`;
 }
@@ -1817,8 +1817,8 @@ function scoreTiles(pos,rows){
   return titles.map(t=>[t, t==='Games'?g:TILE[t](A,g)]);
 }
 
-function FactorRow({label, desc, hr, mode, rows, sk, step, line, base, poShow}){
-  const [open,setOpen]=useState(false);
+function FactorRow({label, desc, hr, mode, rows, sk, step, line, base, poShow, initOpen}){
+  const [open,setOpen]=useState(!!initOpen);
   const clr=hr.pct==null?'var(--brd)':srVar(hr.pct);
   const statColKey=STAT_COLKEY[sk];
   const fixed=(mode==='own'||mode==='pool')?FIXED[base].filter(k=>k!==statColKey):null;
@@ -1847,7 +1847,7 @@ function FactorRow({label, desc, hr, mode, rows, sk, step, line, base, poShow}){
   </div>`;
 }
 
-function PlayerModal({p, game, initStat, initThr, onClose}){
+function PlayerModal({p, game, initStat, initThr, initPeriod, initFactor, onClose}){
   const teamShort=p.team==='home'?game.home:game.away;
   const oppShort=p.team==='home'?game.away:game.home;
   const oppFull=fullOf(oppShort);
@@ -1856,7 +1856,16 @@ function PlayerModal({p, game, initStat, initThr, onClose}){
   const sk0=statList.includes(initStat)?initStat:statList[0];
   const [sk,setSk]=useState(sk0);
   const [idx,setIdx]=useState(()=>{const d=stepsOf(sk0);return initThr!=null?Math.min(initThr,d.steps.length-1):d.def;});
-  const [period,setPeriod]=useState('2025');
+  const [period,setPeriod]=useState(initPeriod||'2025');
+  const periodItems=useMemo(()=>{
+    const keys=PERIODS.map(x=>x[0]);
+    if(initPeriod && /^\d+$/.test(initPeriod) && +initPeriod<2000 && !keys.includes(initPeriod)){
+      const extra=[initPeriod,'L'+initPeriod]; const out=[]; let placed=false;
+      for(const it of PERIODS){ if(!placed && /^\d+$/.test(it[0]) && +it[0]<2000 && +it[0] < +initPeriod){ out.push(extra); placed=true; } out.push(it); }
+      if(!placed) out.push(extra); return out;
+    }
+    return PERIODS;
+  },[initPeriod]);
   const {steps}=stepsOf(sk);
   const step=steps[Math.min(idx,steps.length-1)]||steps[0];
   function changeStat(k){setSk(k);setIdx(stepsOf(k).def);}
@@ -1901,14 +1910,14 @@ function PlayerModal({p, game, initStat, initThr, onClose}){
       <div style=${{padding:'12px 14px'}}>
         <div style=${{marginBottom:10}}><span className="flbl" style=${{display:'block',marginBottom:4}}>Stat</span><${Seg} cls="fw" items=${statList.map(k=>[k,STATS[k].short])} value=${sk} onChange=${changeStat}/></div>
         <div className="ctrls" style=${{display:'flex',flexWrap:'wrap',gap:10,justifyContent:'center',alignItems:'flex-end',marginBottom:12}}>
-          <div className="fgrp"><span className="flbl">Period</span><${Seg} items=${PERIODS} value=${period} onChange=${setPeriod}/></div>
+          <div className="fgrp"><span className="flbl">Period</span><${Seg} items=${periodItems} value=${period} onChange=${setPeriod}/></div>
           <div className="fgrp" style=${{flex:1,minWidth:180,maxWidth:320}}><span className="flbl">Threshold</span><${ThreshSlider} sk=${sk} idx=${Math.min(idx,steps.length-1)} setIdx=${setIdx}/></div>
         </div>
-        <${FactorRow} label="All Games" desc=${desc(hrAll)} hr=${hrAll} mode="own" rows=${fAll} sk=${sk} step=${step} line=${line} base=${base}/>
-        <${FactorRow} label=${isHome?'Home Games':'Away Games'} desc=${desc(hrHA)} hr=${hrHA} mode="own" rows=${fHA} sk=${sk} step=${step} line=${line} base=${base}/>
-        <${FactorRow} label=${'vs '+abbr(oppShort)} desc=${desc(hrVs)} hr=${hrVs} mode="own" rows=${fVs} sk=${sk} step=${step} line=${line} base=${base}/>
-        ${ctx.dow!=null?html`<${FactorRow} label=${dowLabel} desc=${desc(hrDOW)} hr=${hrDOW} mode="own" rows=${fDOW} sk=${sk} step=${step} line=${line} base=${base}/>`:''}
-        ${ctx.night!=null?html`<${FactorRow} label=${dnLabel} desc=${desc(hrDN)} hr=${hrDN} mode="own" rows=${fDN} sk=${sk} step=${step} line=${line} base=${base}/>`:''}
+        <${FactorRow} label="All Games" desc=${desc(hrAll)} hr=${hrAll} mode="own" rows=${fAll} sk=${sk} step=${step} line=${line} base=${base} initOpen=${initFactor==='all'}/>
+        <${FactorRow} label=${isHome?'Home Games':'Away Games'} desc=${desc(hrHA)} hr=${hrHA} mode="own" rows=${fHA} sk=${sk} step=${step} line=${line} base=${base} initOpen=${initFactor==='ha'}/>
+        <${FactorRow} label=${'vs '+abbr(oppShort)} desc=${desc(hrVs)} hr=${hrVs} mode="own" rows=${fVs} sk=${sk} step=${step} line=${line} base=${base} initOpen=${initFactor==='vs'}/>
+        ${ctx.dow!=null?html`<${FactorRow} label=${dowLabel} desc=${desc(hrDOW)} hr=${hrDOW} mode="own" rows=${fDOW} sk=${sk} step=${step} line=${line} base=${base} initOpen=${initFactor==='dow'}/>`:''}
+        ${ctx.night!=null?html`<${FactorRow} label=${dnLabel} desc=${desc(hrDN)} hr=${hrDN} mode="own" rows=${fDN} sk=${sk} step=${step} line=${line} base=${base} initOpen=${initFactor==='dn'}/>`:''}
         <${FactorRow} label=${teamShort+' '+POS_PLURAL[pos]} desc=${desc(hrTP)} hr=${hrTP} mode="pool" poShow="opp" rows=${tpRows} sk=${sk} step=${step} line=${line} base=${base}/>
         <${FactorRow} label=${POS_PLURAL[pos]+' vs '+abbr(oppShort)} desc=${desc(hrPO)} hr=${hrPO} mode="pool" poShow="team" rows=${poRows} sk=${sk} step=${step} line=${line} base=${base}/>
       </div>
@@ -1976,7 +1985,7 @@ function MatchHeader({game,gi,setGi}){
         ${game.venue?html`<div className="mh-venue" style=${{fontSize:9.5,opacity:.85,marginTop:2}}>${game.venue}</div>`:''}
         <div className="mh-ko" style=${{fontSize:10,opacity:.8,marginTop:1}}>KO ${venueTime(game.koUTC,game.tz)}</div>
         <div className="mh-odds" style=${{fontSize:11,fontWeight:800,marginTop:6,lineHeight:1.35}}>${oddsTitle(game)}</div>
-        <button className="chg-game" onClick=${()=>setMenu(m=>!m)}>Change Game <span style=${{fontSize:9}}>${menu?'▲':'▼'}</span></button>
+        <button className="chg-game" data-gswitch="1" onClick=${()=>setMenu(m=>!m)}>Change Game <span style=${{fontSize:9}}>${menu?'▲':'▼'}</span></button>
       </div>
       <div style=${{color:txtOn(H),textAlign:'center',minWidth:0}}><${Badge} s=${h} cls="gl"/><div className="mh-tn" style=${{fontWeight:800,fontSize:14,marginTop:4}}><span className="tn-full">${h}</span><span className="tn-abbr">${abbr(h)}</span></div><div className="sub" style=${{color:'inherit',opacity:.9}}>${rh.w}-${rh.l}</div><${FormStrip} s=${h}/></div>
     </div>
@@ -2194,7 +2203,7 @@ function PlayerInsightsSection({game,onOpenPlayer}){
   if(!all.length) return '';
   return html`<div className="kins">
     <${InsHeader} open=${open} setOpen=${setOpen} streaksOnly=${so} setStreaksOnly=${setSo}/>
-    ${open?html`<div className="kins-body">${list.length?html`<div className="ins-grid">${list.map((i,x)=>html`<${PlayerInsTile} key=${x} i=${i} onOpen=${()=>onOpenPlayer(i.p,i.sk,i.thrIdx)}/>`)}</div>`:html`<div className="sub" style=${{padding:'6px 2px'}}>No qualifying streaks for this game.</div>`}</div>`:''}
+    ${open?html`<div className="kins-body">${list.length?html`<div className="ins-grid">${list.map((i,x)=>html`<${PlayerInsTile} key=${x} i=${i} onOpen=${()=>onOpenPlayer(i.p,i.sk,i.thrIdx,String(i.win),i.factor)}/>`)}</div>`:html`<div className="sub" style=${{padding:'6px 2px'}}>No qualifying streaks for this game.</div>`}</div>`:''}
   </div>`;
 }
 function TeamInsightsSection({game}){
@@ -2215,7 +2224,7 @@ function App(){
   const [tab,setTab]=useState('player');
   const [modal,setModal]=useState(null);
   const game=GAMES[gi];
-  const openPlayer=(p,stat,thr)=>setModal({p,stat:stat||'td',thr:thr||0});
+  const openPlayer=(p,stat,thr,period,factor)=>setModal({p,stat:stat||'td',thr:thr||0,period,factor});
   return html`<div>
     <div className="hdr"><div className="hdr-in">
       <div className="logo-t">🏈 <span className="logo-b">College Football</span> Dashboard</div>
@@ -2229,10 +2238,184 @@ function App(){
       <div className="subtabs">${[['player','Player Stats'],['team','Team Stats']].map(([k,l])=>html`<button key=${k} className=${'subtab'+(tab===k?' on':'')} onClick=${()=>setTab(k)}>${l}</button>`)}</div>
       ${tab==='player'?html`<${PlayerStatsTab} game=${game} onOpen=${openPlayer}/>`:html`<${TeamStatsTab} game=${game}/>`}
     </div>
-    ${modal?html`<${PlayerModal} p=${modal.p} game=${game} initStat=${modal.stat} initThr=${modal.thr} onClose=${()=>setModal(null)}/>`:''}
+    ${modal?html`<${PlayerModal} p=${modal.p} game=${game} initStat=${modal.stat} initThr=${modal.thr} initPeriod=${modal.period} initFactor=${modal.factor} onClose=${()=>setModal(null)}/>`:''}
   </div>`;
 }
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
 })();
 </script>
+<!-- ===========================================================================
+     RSG deep-link reader  —  v2
+     Paste this directly above </body> in each dashboard. It replaces the older
+     reader; if one is already in the file, delete that first.
+
+     Understands these URL fragments:
+        #game=3                            open the fourth game
+        #game=3&player=Josh%20Allen        open that game, then that player
+        #game=3&tab=teamstats              open that game, then Team Stats
+        #game=3&tab=teamstats&team=Sydney  ...and select that team
+        #player=Josh%20Allen               just find the player on the page
+
+     The app links every insight tile and preview pick this way, so tapping a
+     streak lands on the exact player or team behind it.
+
+     Defensive on purpose: React re-renders after each click, so every step
+     waits for the page to settle, checks the click actually took, and retries
+     before giving up. A fragment it can't act on is ignored — the dashboard
+     simply opens as normal.
+=========================================================================== -->
+<script>
+(function () {
+  'use strict';
+
+  function params() {
+    var out = {};
+    String(location.hash || '').replace(/^#/, '').split('&').forEach(function (pair) {
+      if (!pair) return;
+      var i = pair.indexOf('=');
+      var k = i < 0 ? pair : pair.slice(0, i);
+      var v = i < 0 ? '' : pair.slice(i + 1);
+      try { out[k] = decodeURIComponent(v.replace(/\+/g, ' ')); } catch (e) { out[k] = v; }
+    });
+    return out;
+  }
+
+  function whenReady(sel, cb, tries) {
+    tries = tries == null ? 80 : tries;
+    var els = document.querySelectorAll(sel);
+    if (els.length) return cb(els);
+    if (tries <= 0) return cb(null);
+    setTimeout(function () { whenReady(sel, cb, tries - 1); }, 100);
+  }
+
+  function isOn(el) { return /(^|\s)on(\s|$)/.test((el && el.className) || ''); }
+  function txt(el) { return ((el && el.textContent) || '').replace(/\s+/g, ' ').trim(); }
+  function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+  /* ---- 1. the game ---------------------------------------------------- */
+  function selectGame(idx, done, attempt) {
+    attempt = attempt || 0;
+    /* some dashboards keep the game buttons behind a "Change game" popover */
+    if (!document.querySelector('.gbtn')) {
+      var opener = document.querySelector('.gswitch-btn, .gswitch, [data-gswitch]');
+      if (opener) opener.click();
+    }
+    whenReady('.gbtn', function (btns) {
+      if (!btns || !btns[idx]) return done();
+      if (isOn(btns[idx]) || attempt >= 6) return setTimeout(done, 260);
+      btns[idx].click();
+      /* React can discard the first click while it mounts — verify, then retry */
+      setTimeout(function () {
+        var now = document.querySelectorAll('.gbtn');
+        if (now[idx] && isOn(now[idx])) return setTimeout(done, 260);
+        selectGame(idx, done, attempt + 1);
+      }, 180 + attempt * 120);
+    });
+  }
+
+  /* ---- 2. a tab, found by the words on it ------------------------------ */
+  function clickByText(label, done, attempt) {
+    attempt = attempt || 0;
+    var want = norm(label);
+    if (!want) return done();
+    var all = document.querySelectorAll('button, .tb, [role="tab"]');
+    var hit = null;
+    Array.prototype.forEach.call(all, function (el) {
+      if (!hit && norm(txt(el)) === want) hit = el;
+    });
+    if (!hit) {
+      Array.prototype.forEach.call(all, function (el) {
+        if (!hit && norm(txt(el)).indexOf(want) === 0) hit = el;
+      });
+    }
+    if (!hit) {
+      return attempt < 8
+        ? setTimeout(function () { clickByText(label, done, attempt + 1); }, 150)
+        : done();
+    }
+    if (isOn(hit)) return setTimeout(done, 200);
+    hit.click();
+    setTimeout(function () {
+      if (attempt < 4) return clickByText(label, done, attempt + 1);
+      done();
+    }, 200);
+  }
+
+  /* ---- 3. the team, then bring it into view ---------------------------- */
+  function selectTeam(name, done) {
+    var want = norm(name);
+    if (!want) return done();
+    var pick = null;
+    Array.prototype.forEach.call(
+      document.querySelectorAll('button, .tb, [role="tab"], .tsel, .tbtn, select option'),
+      function (el) { if (!pick && norm(txt(el)) === want) pick = el; }
+    );
+    if (pick) {
+      if (pick.tagName === 'OPTION') {
+        var sel = pick.parentNode;
+        sel.value = pick.value;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (!isOn(pick)) {
+        pick.click();
+      }
+      return setTimeout(done, 240);
+    }
+    var seen = null;
+    Array.prototype.forEach.call(document.querySelectorAll('h1,h2,h3,h4,td,th,div,span'), function (el) {
+      if (seen || el.children.length) return;
+      if (norm(txt(el)) === want) seen = el;
+    });
+    if (seen && seen.scrollIntoView) seen.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    done();
+  }
+
+  /* ---- 4. the player's modal ------------------------------------------ */
+  function openPlayer(name, attempt) {
+    attempt = attempt || 0;
+    var want = norm(name);
+    if (!want) return;
+    var hit = null;
+    Array.prototype.forEach.call(
+      document.querySelectorAll('td, .pn, .pname, button, a, span, div'),
+      function (el) {
+        if (hit || el.children.length > 1) return;
+        if (norm(txt(el)) === want) hit = el;
+      }
+    );
+    if (!hit && attempt < 14) {
+      return setTimeout(function () { openPlayer(name, attempt + 1); }, 220);
+    }
+    if (!hit) return;
+    var click = hit.closest ? (hit.closest('tr') || hit.closest('button') || hit) : hit;
+    if (click.scrollIntoView) click.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    click.click();
+  }
+
+  function run() {
+    var p = params();
+    if (!p.game && !p.player && !p.tab && !p.team) return;
+    var gi = (p.game == null || p.game === '') ? null : parseInt(p.game, 10);
+
+    var afterGame = function () {
+      clickByText(p.tab || '', function () {
+        selectTeam(p.team || '', function () {
+          if (p.player) openPlayer(p.player);
+        });
+      });
+    };
+
+    if (gi != null && !isNaN(gi)) selectGame(gi, afterGame);
+    else afterGame();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { setTimeout(run, 400); });
+  } else {
+    setTimeout(run, 400);
+  }
+  /* a link tapped while the dashboard is already open */
+  window.addEventListener('hashchange', function () { setTimeout(run, 120); });
+})();
+</script>
+
 </body></html>
